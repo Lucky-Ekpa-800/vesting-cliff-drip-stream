@@ -6,7 +6,11 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test optimize clean fmt lint check
+.PHONY: all build test optimize clean fmt lint check help
+
+## Show available targets
+help:
+	@awk '/^## /{desc=substr($$0,4)} /^[a-zA-Z_-]+:/{if(desc) printf "  %-10s %s\n", $$1, desc; desc=""}' $(MAKEFILE_LIST)
 
 all: build
 
