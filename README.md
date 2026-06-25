@@ -146,6 +146,9 @@ make build
 make test
 ```
 
+CI also runs the contract test suite through Soroban's WASM runner so the
+contract is exercised in the same target it is deployed to.
+
 ### Deploy to Testnet
 
 ```bash
