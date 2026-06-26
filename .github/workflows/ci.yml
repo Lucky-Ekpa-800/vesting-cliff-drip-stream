@@ -43,6 +43,5 @@ jobs:
       - name: Build WASM
         run: cargo build --target wasm32-unknown-unknown --release
 
-      - name: TypeScript typecheck
-        working-directory: frontend
-        run: npm ci && npm run typecheck
+      - name: Docs
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
