@@ -153,6 +153,8 @@ contract is exercised in the same target it is deployed to.
 
 ### Deploy to Testnet
 
+For a full step-by-step walkthrough including expected output and common errors, see [docs/deploy.md](docs/deploy.md).
+
 ```bash
 stellar keys generate default --network testnet --fund
 ./scripts/deploy.sh default
