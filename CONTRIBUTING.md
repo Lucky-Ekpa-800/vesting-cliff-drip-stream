@@ -57,3 +57,24 @@ chore: bump soroban-sdk to 22.0
 ```
 
 Breaking changes: append `!` or add `BREAKING CHANGE:` in the footer.
+
+## Changelog
+
+Every pull request **must** include a changelog entry. CI will reject PRs that omit one.
+
+1. Open `CHANGELOG.md`.
+2. Add your entry under the `## [Unreleased]` section.
+3. Choose the appropriate sub-section — `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, or `Security` — and write one concise line per change.
+4. Do **not** add a new version header; that is done at release time.
+
+Example entry:
+
+```markdown
+## [Unreleased]
+
+### Fixed
+
+- Clamp claimable amount to zero after stream end to prevent negative returns.
+```
+
+Follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions.
