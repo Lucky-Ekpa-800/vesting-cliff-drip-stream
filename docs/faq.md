@@ -1,84 +1,132 @@
 # Frequently Asked Questions
 
-> This document is updated whenever a support question recurs. If your question isn't here, open an issue and it may be added.
+---
+
+## Stream Lifecycle
+
+**Q: What happens if the cliff ledger is never reached?**
+
+Nothing is claimable. Tokens stay locked in the contract vault until either the cliff ledger arrives (at which point the recipient can claim all accrued tokens at once) or the sponsor cancels the stream. If the sponsor cancels before the cliff, the **full deposit is refunded to the sponsor** — the recipient receives nothing.
 
 ---
 
-## Stream lifecycle
+**Q: What happens when the stream reaches `end_ledger`?**
 
-**Q: What happens if the cliff ledger is never reached?**  
-The tokens stay locked in the contract vault. The sponsor can call `cancel_stream` at any time before the cliff to reclaim the full deposit. The recipient cannot claim anything and receives nothing on cancellation.
+Accrual stops at `end_ledger`. The recipient can still call `claim_vested` after that point to collect any unclaimed tokens; the cap logic in the contract uses `min(current_ledger, end_ledger)` so no extra tokens are paid out. Once the final claim is processed the schedule is deleted from storage and a `StreamCompleted` event is emitted.
 
-**Q: What happens when `end_ledger` passes without a final claim?**  
-Accrual stops at `end_ledger` — no new tokens are generated. The already-accrued balance stays in the vault until the recipient calls `claim_vested`, which will transfer everything earned up to `end_ledger`. The stream entry is removed from storage after that final claim.
+---
 
-**Q: Can the rate be changed after a stream is created?**  
-No. `rate_per_ledger` is immutable once the stream is created. To change it, the sponsor must cancel the existing stream and create a new one with the desired rate.
+**Q: Can the rate be changed after a stream is created?**
 
-**Q: Can the cliff or duration be extended?**  
-No. All schedule parameters (`cliff_ledger`, `end_ledger`, `rate_per_ledger`) are fixed at creation time. Cancel and recreate to change any of them.
+No. `rate_per_ledger` is immutable once the stream is created. There is no `update_stream` entry-point. To change the rate you must cancel the existing stream (subject to the refund rules above) and create a new one.
 
-**Q: Can a recipient have more than one active stream?**  
-No. Only one stream per recipient address is allowed. A second `create_vesting_stream` call for the same recipient returns `ScheduleAlreadyExists` (error code 6). If you need multiple streams, use distinct recipient addresses (e.g. separate sub-accounts).
+---
 
-**Q: What happens if the sponsor cancels after the cliff but before the stream ends?**  
-Tokens accrued from `start_ledger` up to the current ledger are transferred to the recipient. Any tokens not yet accrued (from now until `end_ledger`) are refunded to the sponsor. The stream is then removed from storage.
+**Q: Can `cliff_duration` or `total_duration` be changed after creation?**
 
-**Q: Is there a way to pause a stream?**  
-No. The contract has no pause mechanism. Cancel and recreate is the only option.
+No, for the same reason — the `VestingSchedule` stored on-chain is write-once after `create_vesting_stream`. Cancel and recreate if you need different durations.
+
+---
+
+**Q: Can a recipient have more than one active stream at a time?**
+
+Not from the same contract deployment — the schedule is keyed by recipient address, so a second `create_vesting_stream` call for the same recipient fails with `ScheduleAlreadyExists` (error 6). If you need multiple concurrent streams for one address, deploy a second contract instance.
+
+---
+
+**Q: Who can cancel a stream?**
+
+Only the original **sponsor** (the address that called `create_vesting_stream`). The sponsor address is not stored explicitly; `cancel_stream` accepts a `sponsor` argument and calls `sponsor.require_auth()`, so the transaction must be signed by the sponsor. Recipients cannot cancel their own stream.
+
+---
+
+**Q: What does the recipient keep when a stream is cancelled?**
+
+- **Before the cliff**: the recipient keeps nothing; the full remaining deposit is returned to the sponsor.
+- **After the cliff**: the recipient keeps all tokens accrued up to the cancellation ledger (they are transferred immediately by the cancel transaction). The sponsor receives the unaccrued remainder.
+
+---
+
+**Q: Is there a way to pause a stream?**
+
+No pause mechanism exists. The contract has no admin key and no pause entry-point. The only options are cancel-and-recreate or wait.
 
 ---
 
 ## Claiming
 
-**Q: What does the first claim look like after the cliff?**  
-The first claim releases all tokens accrued since `start_ledger` in a single transfer (the "instant catch-up"). Subsequent claims only cover the period since the previous claim.
+**Q: How often should a recipient call `claim_vested`?**
 
-**Q: Can someone other than the recipient call `claim_vested`?**  
-No. `claim_vested` calls `recipient.require_auth()`, so only the recipient (or an authorised delegate) can trigger it.
-
-**Q: Can the recipient claim partial amounts?**  
-No. `claim_vested` always transfers the full claimable balance at the time of the call. There is no partial-claim parameter.
-
-**Q: Why did my `claim_vested` call return `NothingToClaim`?**  
-Either the cliff hasn't been reached yet (`CliffNotReached` would be returned in that case), or the stream ended and the final claim was already made. It can also happen if `current_ledger == last_claimed_ledger` (e.g. you claimed in the same ledger twice).
+As often or as rarely as you like — there is no penalty for waiting. Each call collects all accrued tokens since the last claim in a single transfer. Waiting costs nothing beyond the opportunity cost of having tokens sit in the contract.
 
 ---
 
-## Tokens and compatibility
+**Q: What happens on the first claim after the cliff?**
 
-**Q: Which tokens are supported?**  
-Any token that implements the [Stellar token interface (SEP-41)](https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0041.md). This includes:
-- Stellar Asset Contracts (SAC) wrapping classic Stellar assets (XLM, USDC, etc.)
-- Custom Soroban tokens that implement the standard `transfer` interface
-
-Tokens that deviate from the standard interface (e.g. fee-on-transfer tokens) may cause unexpected behaviour and are not officially supported.
-
-**Q: Can the streamed token be changed after creation?**  
-No. The `token` address is stored in the schedule at creation time and cannot be updated.
+All tokens accrued from `start_ledger` through the current ledger are released in a single "catch-up" transfer. This is the intended cliff behaviour — tokens accumulate silently during the cliff period and unlock in one lump sum.
 
 ---
 
-## Fees and costs
+**Q: Why does `claim_vested` return `NothingToClaim`?**
 
-**Q: How much does it cost to create a stream?**  
-Approximately **0.05–0.08 XLM** in Soroban resource fees at current mainnet rates (mid-2025, XLM ≈ $0.10). The dominant component is the rent fee for writing a ~250-byte persistent entry with a 60-day TTL. Always run `stellar transaction simulate` for an exact fee before submission.
-
-**Q: How much does claiming cost?**  
-A typical `claim_vested` call costs approximately **0.01–0.03 XLM**, covering I/O, CPU, and a conditional TTL bump. If the stream's storage entry TTL has already been refreshed within the last 30 days the rent component is a no-op.
-
-**Q: Who pays the transaction fees?**  
-Whoever submits the transaction pays the Soroban resource fees. For `create_vesting_stream` this is typically the sponsor; for `claim_vested` it is the recipient. The contract itself does not charge any protocol fee beyond the on-chain resource costs.
-
-**Q: Does the contract hold XLM as a reserve?**  
-No. The contract vault only holds the streamed token (transferred at creation). All on-chain resource fees are paid by the transaction submitter in XLM as standard Soroban fees; the contract has no XLM balance requirement of its own.
+Either the cliff has not been reached yet (which returns `CliffNotReached`, error 2), or the stream has ended and all tokens were already claimed in a previous transaction. `claimable_amount` is a free read-only view you can query before attempting a claim to avoid a failed transaction.
 
 ---
 
-## Security and administration
+## Token Support
 
-**Q: Is there an admin or owner who can rug the contract?**  
-No. The contract has no admin key, no upgrade authority, and no backdoor. Only the original sponsor of a given stream can cancel it, and only the recipient can claim from it.
+**Q: Which tokens are supported?**
 
-**Q: What if the contract WASM or my stream entry gets archived?**  
-Persistent entries that are untouched for more than ~60 days reach TTL 0 and are archived (not deleted). Starting with Protocol 23, archived entries are automatically restored when a transaction that accesses them is simulated via Stellar RPC — the simulation response includes a restoration preamble. Normal rent fees apply on restoration. See [docs/storage.md](storage.md) for details.
+Any token that implements the Stellar Asset Contract (SAC) interface — i.e. exposes a `transfer(from, to, amount)` function conforming to the SEP-41 token interface. This covers all Stellar classic assets wrapped via SAC and any custom Soroban token that follows the standard. Non-standard tokens missing the `transfer` function will cause the `create_vesting_stream` transaction to fail at the transfer step.
+
+---
+
+**Q: Can native XLM be streamed?**
+
+Yes. The native XLM asset has a SAC contract address on every Stellar network. Pass that address as the `token` argument. You can obtain the native asset contract address with:
+
+```bash
+stellar contract id asset --asset native --network testnet
+```
+
+---
+
+**Q: Are NFTs or non-fungible assets supported?**
+
+No. The contract works with fungible amounts expressed as `i128`. NFTs do not expose the SAC fungible token interface.
+
+---
+
+## Gas & Fees
+
+**Q: Who pays the transaction fees?**
+
+The transaction submitter pays Stellar network fees (the base fee in stroops). For `create_vesting_stream` the sponsor typically submits and pays. For `claim_vested` the recipient submits and pays. There are no protocol-level fees charged by this contract itself.
+
+---
+
+**Q: How expensive is `create_vesting_stream` in fees?**
+
+The operation performs one token `transfer` (sponsor → contract vault) and one persistent storage write plus a TTL bump. Expect a higher fee than a simple payment due to the storage write, but still well within typical Soroban resource budgets. Run `stellar contract invoke --fee <amount>` with a generous fee on testnet to measure the actual resource consumption for your specific inputs.
+
+---
+
+**Q: Is there a risk of the stream data expiring from storage?**
+
+TTL is extended to ~60 days on every read or write. For streams longer than 60 days without any interaction (no claims, no cancellation), call `get_schedule` periodically to trigger a TTL bump. In practice, any `claim_vested` call resets the TTL. If a stream's storage entry does expire it can no longer be claimed or cancelled — tokens would be locked. Keep streams active by claiming at least once every ~60 days.
+
+---
+
+## Security & Errors
+
+**Q: Can the contract be upgraded or paused by a hidden admin?**
+
+No. The contract has no `upgrade`, `pause`, or admin entry-point. Once deployed, behaviour is fixed by the WASM bytecode. There is no owner key.
+
+**Q: What does error code 5 (`DepositOverflow`) mean?**
+
+The product `rate × total_duration` exceeds `i128::MAX`. Lower the rate or the duration. The safe upper bound for rate given a duration is `i128::MAX / total_duration` (≈ `1.7 × 10^38 / total_duration`).
+
+---
+
+*Last updated: 2026-06-26. Open an issue if your question isn't answered here.*
