@@ -60,6 +60,10 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
 ```
 
 
+## Architecture Decision Records
+
+Key design decisions (storage layout, rate type, cliff math, error codes, TTL strategy) are documented in [`docs/adr/`](docs/adr/README.md).
+
 ## Security
 
 For information about reporting vulnerabilities and our security policy, please see [SECURITY.md](SECURITY.md).
