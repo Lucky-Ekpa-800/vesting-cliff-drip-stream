@@ -1,5 +1,7 @@
 import "./globals.css";
 import { WalletProvider } from "@/contexts/WalletContext";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ErrorFallback, WalletErrorPage } from "@/components/ErrorPages";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -10,7 +12,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body>
-        <WalletProvider>{children}</WalletProvider>
+        {/* Top-level boundary: catches any render error in the whole tree */}
+        <ErrorBoundary fallback={(reset) => <ErrorFallback reset={reset} />}>
+          {/* Inner boundary: isolates wallet connection errors */}
+          <ErrorBoundary fallback={(reset) => <WalletErrorPage reset={reset} />}>
+            <WalletProvider>{children}</WalletProvider>
+          </ErrorBoundary>
+        </ErrorBoundary>
       </body>
     </html>
   );
