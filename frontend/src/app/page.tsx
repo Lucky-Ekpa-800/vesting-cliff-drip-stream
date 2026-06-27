@@ -97,7 +97,12 @@ export default function Home() {
       <main className="page">
         <header className="header">
           <h1>Vesting Streams</h1>
-          <WalletButton />
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <a href="/history" className="btn btn-ghost" style={{ fontSize: "0.875rem" }}>
+              History
+            </a>
+            <WalletButton />
+          </div>
         </header>
         <StatusLegend />
         <StreamList />
