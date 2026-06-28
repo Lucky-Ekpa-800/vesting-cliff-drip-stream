@@ -9,6 +9,8 @@ import { CancelConfirmModal } from "@/components/CancelConfirmModal";
 import { SegmentedProgressBar } from "@/components/SegmentedProgressBar";
 import { TxProvider, useTx } from "@/components/TxDrawer";
 import { SponsorStreamListEmpty } from "@/components/EmptyStates";
+import { StreamListSkeleton } from "@/components/Skeletons";
+import { CopyButton } from "@/components/CopyButton";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { AnalyticsOptOut } from "@/components/AnalyticsOptOut";
 import { analytics } from "@/analytics";
@@ -37,6 +39,7 @@ function StreamList() {
   const { t } = useTranslation();
   const { setPending, setConfirmed, setFailed } = useTx();
   const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<VestingStream | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Simulate async data fetch; replace with real contract reads
@@ -48,6 +51,17 @@ function StreamList() {
   async function handleClaim() {
     if (claimTarget) analytics.claimSubmitted(claimTarget.token, claimTarget.claimableAmount);
     setClaimTarget(null);
+    setPending();
+    try {
+      await new Promise((r) => setTimeout(r, 1200));
+      setConfirmed("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2");
+    } catch (err) {
+      setFailed(err instanceof Error ? err.message : "Unknown error — please retry.");
+    }
+  }
+
+  async function handleCancel() {
+    setCancelTarget(null);
     setPending();
     try {
       await new Promise((r) => setTimeout(r, 1200));
