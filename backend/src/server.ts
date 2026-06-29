@@ -2,22 +2,27 @@ import http from "http";
 import express from "express";
 import { networkConfig } from "./config/network.js";
 import { idempotencyMiddleware } from "./middleware/idempotency.js";
+import { rateLimitMiddleware } from "./middleware/rateLimit.js";
 import { scheduleCleanupJob } from "./jobs/streamCleanup.js";
 import { startAdminServer } from "./admin/server.js";
-import { vestingRouter } from "./routes/vesting.js";
-import { attachWebSocketServer } from "./ws.js";
-import { startIndexer } from "./indexer.js";
+import { healthHandler, readyHandler } from "./routes/health.js";
+import { sponsorAnalyticsHandler } from "./routes/analytics.js";
 
 const app = express();
 app.use(express.json());
 
+// Rate limiting on all public routes (#32)
+app.use(rateLimitMiddleware);
+
 // Apply idempotency middleware to mutating endpoints
 app.use(["/api/streams", "/api/claim", "/api/cancel"], idempotencyMiddleware);
 
-// Public API routes
-app.get("/health", (_req, res) => {
-  res.json({ status: "ok", network: networkConfig.network });
-});
+// Health / readiness probes (#35)
+app.get("/health", healthHandler);
+app.get("/ready", readyHandler);
+
+// Analytics (#34)
+app.get("/analytics/sponsor/:address", sponsorAnalyticsHandler);
 
 // Issue #26 — REST API for vesting schedule queries
 app.use("/api", vestingRouter);
